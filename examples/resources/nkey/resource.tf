@@ -1,0 +1,2 @@
+resource "nkey" "nkey" {
+}
