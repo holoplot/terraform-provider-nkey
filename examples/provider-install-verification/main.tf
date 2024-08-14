@@ -1,9 +1,9 @@
 terraform {
-    required_providers {
-        nkey = {
-            source  = "registry.terraform.io/holoplot/nkey"
-        }
+  required_providers {
+    nkey = {
+      source = "registry.terraform.io/holoplot/nkey"
     }
+  }
 }
 
 provider "nkey" {
