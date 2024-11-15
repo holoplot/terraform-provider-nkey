@@ -5,10 +5,12 @@ package provider
 
 import (
 	"context"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
@@ -29,6 +31,7 @@ type Nkey struct {
 
 // NkeyModel describes the resource data model.
 type NkeyModel struct {
+	KeyType     types.String `tfsdk:"type"`
 	Public_key  types.String `tfsdk:"public_key"`
 	Private_key types.String `tfsdk:"private_key"`
 }
@@ -43,6 +46,12 @@ func (r *Nkey) Schema(ctx context.Context, req resource.SchemaRequest, resp *res
 		MarkdownDescription: "An nkey is an ed25519 key pair formatted for use with NATS.",
 
 		Attributes: map[string]schema.Attribute{
+			"type": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString("account"),
+				Description: "The type of nkey to generate. Must be one of user|account|server|cluster|operator|curve",
+			},
 			"public_key": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Public key of the nkey to be given in config to the nats server",
@@ -70,12 +79,27 @@ func (r *Nkey) Create(ctx context.Context, req resource.CreateRequest, resp *res
 		return
 	}
 
-	keys, err := nkeys.CreateAccount()
+	var keys nkeys.KeyPair
+	var err error
+	switch strings.ToLower(data.KeyType.ValueString()) {
+	case "user":
+		keys, err = nkeys.CreateUser()
+	case "account":
+		keys, err = nkeys.CreateAccount()
+	case "server":
+		keys, err = nkeys.CreateServer()
+	case "cluster":
+		keys, err = nkeys.CreateCluster()
+	case "operator":
+		keys, err = nkeys.CreateOperator()
+	case "curve":
+		keys, err = nkeys.CreateCurveKeys()
+	}
+
 	if err != nil {
 		resp.Diagnostics.AddError("generating nkey", err.Error())
 		return
 	}
-
 	pubKey, err := keys.PublicKey()
 	if err != nil {
 		resp.Diagnostics.AddError("accessing public nkey", err.Error())
