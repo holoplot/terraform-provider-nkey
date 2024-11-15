@@ -10,7 +10,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
@@ -51,6 +53,9 @@ func (r *Nkey) Schema(ctx context.Context, req resource.SchemaRequest, resp *res
 				Computed:    true,
 				Default:     stringdefault.StaticString("account"),
 				Description: "The type of nkey to generate. Must be one of user|account|server|cluster|operator|curve",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"public_key": schema.StringAttribute{
 				Computed:            true,
@@ -110,20 +115,6 @@ func (r *Nkey) Update(ctx context.Context, req resource.UpdateRequest, resp *res
 		return
 	}
 
-	var state NkeyModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if !plan.KeyType.Equal(state.KeyType) {
-		tflog.Debug(ctx, "key type changed. generating new key")
-		if err := plan.generateKeys(); err != nil {
-			resp.Diagnostics.AddError("generating nkey", err.Error())
-			return
-		}
-	}
-
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -132,14 +123,6 @@ func (r *Nkey) Update(ctx context.Context, req resource.UpdateRequest, resp *res
 }
 
 func (r *Nkey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data NkeyModel
-
-	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
 }
 
 func (r *Nkey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -162,6 +145,8 @@ func (m *NkeyModel) generateKeys() (err error) {
 		keys, err = nkeys.CreateOperator()
 	case "curve":
 		keys, err = nkeys.CreateCurveKeys()
+	default:
+		keys, err = nkeys.CreateAccount()
 	}
 	if err != nil {
 		return err
