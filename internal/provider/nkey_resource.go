@@ -31,9 +31,9 @@ type Nkey struct {
 
 // NkeyModel describes the resource data model.
 type NkeyModel struct {
-	KeyType     types.String `tfsdk:"type"`
-	Public_key  types.String `tfsdk:"public_key"`
-	Private_key types.String `tfsdk:"private_key"`
+	KeyType    types.String `tfsdk:"type"`
+	PublicKey  types.String `tfsdk:"public_key"`
+	PrivateKey types.String `tfsdk:"private_key"`
 }
 
 func (r *Nkey) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -79,43 +79,10 @@ func (r *Nkey) Create(ctx context.Context, req resource.CreateRequest, resp *res
 		return
 	}
 
-	var keys nkeys.KeyPair
-	var err error
-	switch strings.ToLower(data.KeyType.ValueString()) {
-	case "user":
-		keys, err = nkeys.CreateUser()
-	case "account":
-		keys, err = nkeys.CreateAccount()
-	case "server":
-		keys, err = nkeys.CreateServer()
-	case "cluster":
-		keys, err = nkeys.CreateCluster()
-	case "operator":
-		keys, err = nkeys.CreateOperator()
-	case "curve":
-		keys, err = nkeys.CreateCurveKeys()
-	}
-
-	if err != nil {
+	if err := data.generateKeys(); err != nil {
 		resp.Diagnostics.AddError("generating nkey", err.Error())
 		return
 	}
-	pubKey, err := keys.PublicKey()
-	if err != nil {
-		resp.Diagnostics.AddError("accessing public nkey", err.Error())
-		return
-	}
-
-	data.Public_key = types.StringValue(pubKey)
-
-	privKey, err := keys.PrivateKey()
-	if err != nil {
-		resp.Diagnostics.AddError("accessing private nkey", err.Error())
-		return
-	}
-
-	data.Private_key = types.StringValue(string(privKey))
-
 	tflog.Trace(ctx, "created nkey resource")
 
 	// Save data into Terraform state
@@ -137,17 +104,31 @@ func (r *Nkey) Read(ctx context.Context, req resource.ReadRequest, resp *resourc
 }
 
 func (r *Nkey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data NkeyModel
-
-	// Read Terraform plan data into the model
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-
+	var plan NkeyModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
+	var state NkeyModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !plan.KeyType.Equal(state.KeyType) {
+		tflog.Debug(ctx, "key type changed. generating new key")
+		if err := plan.generateKeys(); err != nil {
+			resp.Diagnostics.AddError("generating nkey", err.Error())
+			return
+		}
+	}
+
 	// Save updated data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 func (r *Nkey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -163,4 +144,40 @@ func (r *Nkey) Delete(ctx context.Context, req resource.DeleteRequest, resp *res
 
 func (r *Nkey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (m *NkeyModel) generateKeys() (err error) {
+	var keys nkeys.KeyPair
+
+	switch strings.ToLower(m.KeyType.ValueString()) {
+	case "user":
+		keys, err = nkeys.CreateUser()
+	case "account":
+		keys, err = nkeys.CreateAccount()
+	case "server":
+		keys, err = nkeys.CreateServer()
+	case "cluster":
+		keys, err = nkeys.CreateCluster()
+	case "operator":
+		keys, err = nkeys.CreateOperator()
+	case "curve":
+		keys, err = nkeys.CreateCurveKeys()
+	}
+	if err != nil {
+		return err
+	}
+
+	pubKey, err := keys.PublicKey()
+	if err != nil {
+		return err
+	}
+	privKey, err := keys.PrivateKey()
+	if err != nil {
+		return err
+	}
+
+	m.PublicKey = types.StringValue(pubKey)
+	m.PrivateKey = types.StringValue(string(privKey))
+
+	return nil
 }
