@@ -36,6 +36,7 @@ type NkeyModel struct {
 	KeyType    types.String `tfsdk:"type"`
 	PublicKey  types.String `tfsdk:"public_key"`
 	PrivateKey types.String `tfsdk:"private_key"`
+	Seed       types.String `tfsdk:"seed"`
 }
 
 func (r *Nkey) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -64,6 +65,11 @@ func (r *Nkey) Schema(ctx context.Context, req resource.SchemaRequest, resp *res
 			"private_key": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Private key of the nkey to be given to the client for authentication",
+				Sensitive:           true,
+			},
+			"seed": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Seed of the nkey to be given to the client for authentication",
 				Sensitive:           true,
 			},
 		},
@@ -160,9 +166,14 @@ func (m *NkeyModel) generateKeys() (err error) {
 	if err != nil {
 		return err
 	}
+	seed, err := keys.Seed()
+	if err != nil {
+		return err
+	}
 
 	m.PublicKey = types.StringValue(pubKey)
 	m.PrivateKey = types.StringValue(string(privKey))
+	m.Seed = types.StringValue(string(seed))
 
 	return nil
 }

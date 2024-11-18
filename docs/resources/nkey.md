@@ -23,3 +23,4 @@ An nkey is an ed25519 key pair formatted for use with NATS.
 
 - `private_key` (String, Sensitive) Private key of the nkey to be given to the client for authentication
 - `public_key` (String) Public key of the nkey to be given in config to the nats server
+- `seed` (String, Sensitive) Seed of the nkey to be given to the client for authentication
