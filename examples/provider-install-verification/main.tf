@@ -9,4 +9,5 @@ terraform {
 provider "nkey" {
 }
 
-resource "nkey_nkey" "verify" {}
+resource "nkey_nkey" "verify" {
+}
